@@ -1,0 +1,21 @@
+{
+  "name": "discord-semantic-ai",
+  "version": "1.0.0",
+  "description": "A Discord bot that answers questions based on server chat using semantic search and Gemini AI.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "author": "YourName",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.5.0",
+    "discord.js": "^14.10.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.0",
+    "pgvector": "^0.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
