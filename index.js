@@ -1,39 +1,35 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const { Client: PgClient } = require('pg');
-const fs = require('fs');
+const { TextServiceClient } = require('@google-ai/generativelanguage');
 
-// Connect to PostgreSQL
-const db = new PgClient({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-db.connect()
-  .then(() => console.log('✅ Connected to PostgreSQL'))
-  .catch(err => console.error('❌ PostgreSQL connection error:', err));
-
-// Setup Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
+// Gemini 2.5 Flash client
+const gemini = new TextServiceClient({ apiKey: process.env.GEMINI_API_KEY });
+
+// In-memory conversation memory: key = guildId-channelId-userId
+const conversations = {};
+
 // Load commands
+const fs = require('fs');
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
   client.commands.set(command.name, command);
 }
 
-// Handle interactions
+// Handle slash commands
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
+
   const command = client.commands.get(interaction.commandName);
   if (command) {
     try {
-      await command.execute(interaction, db);
+      await command.execute(interaction, gemini, conversations);
     } catch (error) {
-      console.error(error);
-      await interaction.reply({ content: 'There was an error executing the command!', ephemeral: true });
+      console.error('Error executing command:', error);
+      await interaction.reply({ content: '❌ Error executing command!', ephemeral: true });
     }
   }
 });
