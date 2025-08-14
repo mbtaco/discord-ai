@@ -11,5 +11,6 @@
     "discord.js": "^14.14.1",
     "pg": "^8.11.5",
     "dotenv": "^16.3.1"
+    "@google-ai/generativelanguage": "^1.0.0"
   }
 }
