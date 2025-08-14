@@ -1,11 +1,14 @@
-// index.js
-require("dotenv").config();
-const fs = require("fs");
-const path = require("path");
-const { Client, Collection, GatewayIntentBits, Events } = require("discord.js");
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Client, Collection, GatewayIntentBits, Events } from "discord.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
 client.commands = new Collection();
@@ -16,11 +19,11 @@ const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith("
 
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
-  if ("data" in command && "execute" in command) {
+  const command = (await import(`file://${filePath}`)).default;
+  if (command?.data && command?.execute) {
     client.commands.set(command.data.name, command);
   } else {
-    console.warn(`[WARNING] Command ${filePath} is missing required "data" or "execute"`);
+    console.warn(`[WARNING] Command at ${filePath} missing "data" or "execute"`);
   }
 }
 
@@ -33,19 +36,16 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
-  if (!command) {
-    console.error(`❌ No command matching ${interaction.commandName} found.`);
-    return;
-  }
+  if (!command) return;
 
   try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
+    await command.execute(interaction, client);
+  } catch (err) {
+    console.error(err);
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: "⚠️ There was an error executing that command." });
+      await interaction.editReply("⚠️ There was an error executing the command.");
     } else {
-      await interaction.reply({ content: "⚠️ There was an error executing that command.", ephemeral: true });
+      await interaction.reply({ content: "⚠️ There was an error executing the command.", ephemeral: true });
     }
   }
 });
