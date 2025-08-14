@@ -13,15 +13,36 @@ db.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
   .catch(err => console.error('❌ PostgreSQL connection error:', err));
 
+const { Client } = require('pg');
+const db = new Client({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
 (async () => {
   try {
+    await db.connect();
+
+    // Drop table if it exists
+    await db.query(`DROP TABLE IF EXISTS messages`);
+    console.log('✅ Old messages table dropped');
+
+    // Create new table with proper schema
     await db.query(`
-      ALTER TABLE messages
-      ADD CONSTRAINT unique_message_id UNIQUE (message_id);
+      CREATE TABLE messages (
+        message_id BIGINT PRIMARY KEY,
+        server_id BIGINT NOT NULL,
+        channel_id BIGINT NOT NULL,
+        author_id BIGINT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TIMESTAMP NOT NULL
+      )
     `);
-    console.log("✅ Unique constraint added to messages.message_id");
+    console.log('✅ New messages table created with server_id, BIGINTs, and primary key');
+
+    await db.end();
   } catch (err) {
-    console.error("⚠️ Could not add unique constraint:", err.message);
+    console.error('❌ Error setting up messages table:', err.message);
   }
 })();
 // Setup Discord client
