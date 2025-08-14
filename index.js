@@ -8,22 +8,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 client.commands = new Collection();
 
-// Load commands
-const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+// Load command executors (no SlashCommandBuilder here)
+const commandsDir = path.join(__dirname, "commands");
+const files = fs.readdirSync(commandsDir).filter(f => f.endsWith(".js"));
 
-for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = (await import(`file://${filePath}`)).default;
-  if (command?.data && command?.execute) {
-    client.commands.set(command.data.name, command);
+for (const f of files) {
+  const mod = (await import(path.join(commandsDir, f))).default;
+  if (mod?.name && typeof mod.execute === "function") {
+    client.commands.set(mod.name, mod);
   } else {
-    console.warn(`[WARNING] Command at ${filePath} missing "data" or "execute"`);
+    console.warn(`Skipping ${f}: missing name/execute export`);
   }
 }
 
@@ -31,21 +30,19 @@ client.once(Events.ClientReady, c => {
   console.log(`✅ Logged in as ${c.user.tag}`);
 });
 
-// Command handler
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
 
   try {
-    await command.execute(interaction, client);
+    await cmd.execute(interaction);
   } catch (err) {
     console.error(err);
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply("⚠️ There was an error executing the command.");
+      await interaction.editReply("⚠️ There was an error executing that command.");
     } else {
-      await interaction.reply({ content: "⚠️ There was an error executing the command.", ephemeral: true });
+      await interaction.reply({ content: "⚠️ There was an error executing that command.", ephemeral: true });
     }
   }
 });
