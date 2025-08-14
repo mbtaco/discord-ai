@@ -16,7 +16,6 @@ db.connect()
 
 (async () => {
   try {
-    await db.connect();
 
     // Drop table if it exists
     await db.query(`DROP TABLE IF EXISTS messages`);
