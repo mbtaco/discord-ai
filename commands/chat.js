@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from "discord.js";
 import { GoogleGenerativeAI } from "@google/genai";
 
 // Store sessions per user
-const userChats = new Map();
+export const userChats = new Map();
 
 export default {
   data: new SlashCommandBuilder()
