@@ -13,6 +13,17 @@ db.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
   .catch(err => console.error('❌ PostgreSQL connection error:', err));
 
+(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE messages
+      ADD CONSTRAINT unique_message_id UNIQUE (message_id);
+    `);
+    console.log("✅ Unique constraint added to messages.message_id");
+  } catch (err) {
+    console.error("⚠️ Could not add unique constraint:", err.message);
+  }
+})();
 // Setup Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
