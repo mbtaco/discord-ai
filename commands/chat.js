@@ -1,34 +1,37 @@
+// commands/chat.js
+const { SlashCommandBuilder } = require("discord.js");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Store chat sessions per user
+const userChats = {};
+
 module.exports = {
-  name: 'chat',
-  async execute(interaction, gemini, conversations) {
-    const userMessage = interaction.options.getString('message');
-    const newChat = interaction.options.getBoolean('new') || false;
-    const key = `${interaction.guildId}-${interaction.channelId}-${interaction.user.id}`;
+  data: new SlashCommandBuilder()
+    .setName("chat")
+    .setDescription("Chat with Gemini"),
 
-    // Start fresh if newChat
-    if (newChat || !conversations[key]) conversations[key] = [];
-
-    // Add user message
-    conversations[key].push({ role: 'user', content: userMessage });
-
+  async execute(interaction) {
     await interaction.deferReply();
 
-    try {
-      const response = await gemini.generateText({
-        model: 'gemini-2.5-flash',
-        prompt: conversations[key],
-        maxOutputTokens: 300
+    const userId = interaction.user.id;
+    const userMessage = interaction.options.getString("message");
+
+    // Create new chat session if doesn't exist
+    if (!userChats[userId]) {
+      userChats[userId] = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+      }).startChat({
+        history: [], // empty for now
       });
-
-      const answer = response.candidates[0].content;
-
-      // Add AI reply to memory
-      conversations[key].push({ role: 'assistant', content: answer });
-
-      await interaction.editReply(answer);
-    } catch (err) {
-      console.error('Gemini API error:', err);
-      await interaction.editReply('❌ Error contacting AI.');
     }
-  }
+
+    const chat = userChats[userId];
+
+    // Send user message
+    const result = await chat.sendMessage(userMessage);
+
+    await interaction.editReply(result.response.text());
+  },
 };
