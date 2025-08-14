@@ -13,32 +13,6 @@ db.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
   .catch(err => console.error('❌ PostgreSQL connection error:', err));
 
-
-(async () => {
-  try {
-
-    // Drop table if it exists
-    await db.query(`DROP TABLE IF EXISTS messages`);
-    console.log('✅ Old messages table dropped');
-
-    // Create new table with proper schema
-    await db.query(`
-      CREATE TABLE messages (
-        message_id BIGINT PRIMARY KEY,
-        server_id BIGINT NOT NULL,
-        channel_id BIGINT NOT NULL,
-        author_id BIGINT NOT NULL,
-        content TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL
-      )
-    `);
-    console.log('✅ New messages table created with server_id, BIGINTs, and primary key');
-
-    await db.end();
-  } catch (err) {
-    console.error('❌ Error setting up messages table:', err.message);
-  }
-})();
 // Setup Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
