@@ -1,20 +1,15 @@
-import pkg from "@google/genai";
-const { GoogleGenerativeAI } = pkg;
+// Simple in-memory chat history
+const sessions = {};
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Per-user chat sessions
-const userChats = new Map();
-
-export function getChat(userId) {
-  if (!userChats.has(userId)) {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const chat = model.startChat({ history: [] });
-    userChats.set(userId, chat);
+function getSession(key) {
+  if (!sessions[key]) {
+    sessions[key] = [];
   }
-  return userChats.get(userId);
+  return sessions[key];
 }
 
-export function resetChat(userId) {
-  userChats.delete(userId);
+function clearSession(key) {
+  sessions[key] = [];
 }
+
+module.exports = { getSession, clearSession };
