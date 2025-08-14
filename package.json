@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "deploy": "node deploy-commands.js"
+    "deploy-commands": "node deploy-commands.js"
   },
   "dependencies": {
     "@google/genai": "^0.3.0",
