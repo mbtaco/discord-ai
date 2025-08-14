@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const { TextServiceClient } = require('@google-ai/generativelanguage');
+const { TextServiceClient } = require('@google/genai');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
