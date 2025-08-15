@@ -1,15 +1,5 @@
 {
-  "name": "discord-gemini-bot",
-  "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
   "scripts": {
-    "start": "npm index.js",
-    "deploy-commands": "npm deploy-commands.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.15.3",
-    "@google/genai": "^0.1.0",
-    "pg": "^8.11.3"
+    "start": "node index.js"
   }
 }
