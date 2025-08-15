@@ -39,7 +39,7 @@ const commands = [
         .setDescription('Clear your AI conversation history'),
 ].map(command => command.toJSON());
 
-// Store conversation histories per user
+// Store conversation histories per channel
 const conversationHistories = new Map();
 
 // When the client is ready, run this code
@@ -88,16 +88,20 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.deferReply();
 
             const userMessage = interaction.options.getString('message');
-            const userId = interaction.user.id;
+            const channelId = interaction.channel.id;
+            const username = interaction.user.username;
 
-            // Get or create conversation history for this user
-            if (!conversationHistories.has(userId)) {
-                conversationHistories.set(userId, []);
+            // Get or create conversation history for this channel
+            if (!conversationHistories.has(channelId)) {
+                conversationHistories.set(channelId, []);
             }
 
-            const history = conversationHistories.get(userId);
+            const history = conversationHistories.get(channelId);
 
             try {
+                // Create the message with username prefix
+                const prefixedMessage = `${username}: ${userMessage}`;
+
                 // Create chat session with history
                 const chat = model.startChat({
                     history: history,
@@ -108,19 +112,19 @@ client.on('interactionCreate', async (interaction) => {
                 });
 
                 // Send message and get response
-                const result = await chat.sendMessage(userMessage);
+                const result = await chat.sendMessage(prefixedMessage);
                 const response = result.response;
                 let aiReply = response.text();
 
-                // Discord has a 2000 character limit for messages
-                if (aiReply.length > 2000) {
-                    aiReply = aiReply.substring(0, 1997) + '...';
+                // Discord embed has field limits, so truncate if needed
+                if (aiReply.length > 1024) {
+                    aiReply = aiReply.substring(0, 1021) + '...';
                 }
 
                 // Update conversation history
                 history.push({
                     role: 'user',
-                    parts: [{ text: userMessage }],
+                    parts: [{ text: prefixedMessage }],
                 });
                 history.push({
                     role: 'model',
@@ -129,12 +133,31 @@ client.on('interactionCreate', async (interaction) => {
 
                 // Keep only the last 20 messages to avoid hitting API limits
                 if (history.length > 20) {
-                    conversationHistories.set(userId, history.slice(-20));
+                    conversationHistories.set(channelId, history.slice(-20));
                 }
 
-                await interaction.editReply({
-                    content: `**${interaction.user.username}:** ${userMessage}\n\n**AI:** ${aiReply}`,
-                });
+                // Create embed response
+                const embed = {
+                    color: 0x4285f4, // Google blue
+                    fields: [
+                        {
+                            name: '👤 User',
+                            value: `**${username}:** ${userMessage}`,
+                            inline: false,
+                        },
+                        {
+                            name: '🤖 AI',
+                            value: aiReply,
+                            inline: false,
+                        }
+                    ],
+                    footer: {
+                        text: 'Gemini 2.5 Flash'
+                    },
+                    timestamp: new Date().toISOString(),
+                };
+
+                await interaction.editReply({ embeds: [embed] });
 
             } catch (aiError) {
                 console.error('Gemini AI Error:', aiError);
@@ -143,9 +166,9 @@ client.on('interactionCreate', async (interaction) => {
         }
         
         else if (commandName === 'clear') {
-            const userId = interaction.user.id;
-            conversationHistories.delete(userId);
-            await interaction.reply('✅ Your AI conversation history has been cleared!');
+            const channelId = interaction.channel.id;
+            conversationHistories.delete(channelId);
+            await interaction.reply('✅ This channel\'s AI conversation history has been cleared!');
         }
 
     } catch (error) {
@@ -172,18 +195,22 @@ client.on('messageCreate', async (message) => {
     let userMessage = message.content.replace(`<@${client.user.id}>`, '').trim();
     if (!userMessage) return;
 
-    const userId = message.author.id;
+    const channelId = message.channel.id;
+    const username = message.author.username;
 
     // Show typing indicator
     message.channel.sendTyping();
 
     try {
-        // Get or create conversation history for this user
-        if (!conversationHistories.has(userId)) {
-            conversationHistories.set(userId, []);
+        // Get or create conversation history for this channel
+        if (!conversationHistories.has(channelId)) {
+            conversationHistories.set(channelId, []);
         }
 
-        const history = conversationHistories.get(userId);
+        const history = conversationHistories.get(channelId);
+
+        // Create the message with username prefix (only for non-DMs)
+        const prefixedMessage = isDM ? userMessage : `${username}: ${userMessage}`;
 
         // Create chat session with history
         const chat = model.startChat({
@@ -195,19 +222,19 @@ client.on('messageCreate', async (message) => {
         });
 
         // Send message and get response
-        const result = await chat.sendMessage(userMessage);
+        const result = await chat.sendMessage(prefixedMessage);
         const response = result.response;
         let aiReply = response.text();
 
-        // Discord has a 2000 character limit for messages
-        if (aiReply.length > 2000) {
-            aiReply = aiReply.substring(0, 1997) + '...';
+        // Discord embed field limit
+        if (aiReply.length > 1024) {
+            aiReply = aiReply.substring(0, 1021) + '...';
         }
 
         // Update conversation history
         history.push({
             role: 'user',
-            parts: [{ text: userMessage }],
+            parts: [{ text: prefixedMessage }],
         });
         history.push({
             role: 'model',
@@ -216,10 +243,31 @@ client.on('messageCreate', async (message) => {
 
         // Keep only the last 20 messages to avoid hitting API limits
         if (history.length > 20) {
-            conversationHistories.set(userId, history.slice(-20));
+            conversationHistories.set(channelId, history.slice(-20));
         }
 
-        await message.reply(aiReply);
+        // Create embed response
+        const embed = {
+            color: 0x4285f4, // Google blue
+            fields: [
+                {
+                    name: '👤 User',
+                    value: isDM ? userMessage : `**${username}:** ${userMessage}`,
+                    inline: false,
+                },
+                {
+                    name: '🤖 AI',
+                    value: aiReply,
+                    inline: false,
+                }
+            ],
+            footer: {
+                text: 'Gemini 2.5 Flash'
+            },
+            timestamp: new Date().toISOString(),
+        };
+
+        await message.reply({ embeds: [embed] });
 
     } catch (aiError) {
         console.error('Gemini AI Error:', aiError);
