@@ -4,8 +4,8 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "start": "node index.js",
-    "deploy-commands": "node deploy-commands.js"
+    "start": "npm index.js",
+    "deploy-commands": "npm deploy-commands.js"
   },
   "dependencies": {
     "discord.js": "^14.15.3",
