@@ -134,7 +134,7 @@ client.on('interactionCreate', async (interaction) => {
                         parts: [{
                             text: getSystemPrompt()
                         }]
-                    };
+                    },
                     history: history
                 });
 
