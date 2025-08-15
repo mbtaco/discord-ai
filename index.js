@@ -1,10 +1,20 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const {
+    Client,
+    GatewayIntentBits,
+    REST,
+    Routes,
+    SlashCommandBuilder
+} = require('discord.js');
+const {
+    GoogleGenerativeAI
+} = require('@google/generative-ai');
 require('dotenv').config();
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash"
+});
 
 // System prompt for the AI
 const getSystemPrompt = () => {
@@ -13,7 +23,7 @@ const getSystemPrompt = () => {
         dateStyle: 'full',
         timeStyle: 'short'
     });
-    
+
     return `The current date & time is ${currentDate}
 
 You are a Discord bot. The user's message will be prefixed with their username. 
@@ -50,25 +60,16 @@ const client = new Client({
 // Define slash commands
 const commands = [
     new SlashCommandBuilder()
-        .setName('ping')
-        .setDescription('Replies with Pong!'),
+    .setName('ai')
+    .setDescription('Chat with Gemini AI')
+    .addStringOption(option =>
+        option.setName('message')
+        .setDescription('Your message to the AI')
+        .setRequired(true)
+    ),
     new SlashCommandBuilder()
-        .setName('user')
-        .setDescription('Provides information about the user.'),
-    new SlashCommandBuilder()
-        .setName('server')
-        .setDescription('Provides information about the server.'),
-    new SlashCommandBuilder()
-        .setName('ai')
-        .setDescription('Chat with Gemini AI')
-        .addStringOption(option =>
-            option.setName('message')
-                .setDescription('Your message to the AI')
-                .setRequired(true)
-        ),
-    new SlashCommandBuilder()
-        .setName('clear')
-        .setDescription('Clear your AI conversation history'),
+    .setName('clear')
+    .setDescription('Clear your AI conversation history'),
 ].map(command => command.toJSON());
 
 // Store conversation histories per channel
@@ -80,7 +81,9 @@ client.once('ready', async () => {
     console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
 
     // Register slash commands (this will overwrite existing commands)
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    const rest = new REST({
+        version: '10'
+    }).setToken(process.env.DISCORD_TOKEN);
 
     try {
         console.log('Started refreshing application (/) commands.');
@@ -100,22 +103,13 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
-    const { commandName } = interaction;
+    const {
+        commandName
+    } = interaction;
 
     try {
-        if (commandName === 'ping') {
-            await interaction.reply('🏓 Pong!');
-        } 
-        
-        else if (commandName === 'user') {
-            await interaction.reply(`This command was run by ${interaction.user.username}, who joined on ${interaction.member.joinedAt}.`);
-        } 
-        
-        else if (commandName === 'server') {
-            await interaction.reply(`This server is ${interaction.guild.name} and has ${interaction.guild.memberCount} members.`);
-        }
-        
-        else if (commandName === 'ai') {
+
+        if (commandName === 'ai') {
             // Defer reply since AI might take a moment
             await interaction.deferReply();
 
@@ -136,21 +130,12 @@ client.on('interactionCreate', async (interaction) => {
 
                 // Create chat session with history and system prompt
                 const chat = model.startChat({
-                    history: [
-                        {
-                            role: 'user',
-                            parts: [{ text: getSystemPrompt() }],
-                        },
-                        {
-                            role: 'model',
-                            parts: [{ text: 'Understood! I\'m ready to help as a Discord bot. I\'ll keep responses under 1000 characters and use Discord markdown formatting.' }],
-                        },
-                        ...history
-                    ],
-                    generationConfig: {
-                        maxOutputTokens: 1000,
-                        temperature: 0.7,
-                    },
+                    systemInstruction: {
+                        parts: [{
+                            text: getSystemPrompt()
+                        }]
+                    }
+                    history: history
                 });
 
                 // Send message and get response
@@ -166,11 +151,15 @@ client.on('interactionCreate', async (interaction) => {
                 // Update conversation history
                 history.push({
                     role: 'user',
-                    parts: [{ text: prefixedMessage }],
+                    parts: [{
+                        text: prefixedMessage
+                    }],
                 });
                 history.push({
                     role: 'model',
-                    parts: [{ text: aiReply }],
+                    parts: [{
+                        text: aiReply
+                    }],
                 });
 
                 // Keep only the last 20 messages to avoid hitting API limits
@@ -194,15 +183,15 @@ client.on('interactionCreate', async (interaction) => {
                     timestamp: new Date().toISOString(),
                 };
 
-                await interaction.editReply({ embeds: [embed] });
+                await interaction.editReply({
+                    embeds: [embed]
+                });
 
             } catch (aiError) {
                 console.error('Gemini AI Error:', aiError);
                 await interaction.editReply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
             }
-        }
-        
-        else if (commandName === 'clear') {
+        } else if (commandName === 'clear') {
             const channelId = interaction.channel.id;
             conversationHistories.delete(channelId);
             await interaction.reply('✅ This channel\'s AI conversation history has been cleared!');
@@ -222,10 +211,10 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     // Only respond to DMs or mentions, ignore other bots
     if (message.author.bot) return;
-    
+
     const isDM = message.channel.type === 1; // DM channel type
     const isMentioned = message.mentions.has(client.user);
-    
+
     if (!isDM && !isMentioned) return;
 
     // Extract message content (remove bot mention if present)
@@ -251,14 +240,17 @@ client.on('messageCreate', async (message) => {
 
         // Create chat session with history and system prompt
         const chat = model.startChat({
-            history: [
-                {
+            history: [{
                     role: 'user',
-                    parts: [{ text: getSystemPrompt() }],
+                    parts: [{
+                        text: getSystemPrompt()
+                    }],
                 },
                 {
                     role: 'model',
-                    parts: [{ text: 'Understood! I\'m ready to help as a Discord bot. I\'ll keep responses under 1000 characters and use Discord markdown formatting.' }],
+                    parts: [{
+                        text: 'Understood! I\'m ready to help as a Discord bot. I\'ll keep responses under 1000 characters and use Discord markdown formatting.'
+                    }],
                 },
                 ...history
             ],
@@ -281,11 +273,15 @@ client.on('messageCreate', async (message) => {
         // Update conversation history
         history.push({
             role: 'user',
-            parts: [{ text: prefixedMessage }],
+            parts: [{
+                text: prefixedMessage
+            }],
         });
         history.push({
             role: 'model',
-            parts: [{ text: aiReply }],
+            parts: [{
+                text: aiReply
+            }],
         });
 
         // Keep only the last 20 messages to avoid hitting API limits
@@ -309,7 +305,9 @@ client.on('messageCreate', async (message) => {
             timestamp: new Date().toISOString(),
         };
 
-        await message.reply({ embeds: [embed] });
+        await message.reply({
+            embeds: [embed]
+        });
 
     } catch (aiError) {
         console.error('Gemini AI Error:', aiError);
