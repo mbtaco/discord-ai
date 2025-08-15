@@ -1,3 +1,4 @@
+// bot.js
 const {
   Client,
   GatewayIntentBits,
@@ -15,7 +16,12 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // --- System prompt ---
 const getSystemPrompt = () => {
-  const currentDate = new Date().toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'full', timeStyle: 'short' });
+  const currentDate = new Date().toLocaleString('en-US', {
+    timeZone: 'UTC',
+    dateStyle: 'full',
+    timeStyle: 'short'
+  });
+
   return `The current date & time is ${currentDate}
 
 You are a Discord bot. The user's message will be prefixed with their username. 
@@ -40,16 +46,46 @@ __underline__
 1. numbered lists`;
 };
 
-// --- In-memory conversation storage ---
+// --- Discord client & commands ---
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName('ai')
+    .setDescription('Chat with Gemini AI')
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('Your message to the AI')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('clear')
+    .setDescription('Clear your AI conversation history'),
+].map(cmd => cmd.toJSON());
+
+// --- In-memory conversation storage (per-channel) ---
 const conversationHistories = new Map();
 
 // --- Helper: create embed object ---
 function makeEmbed({ username, title, description, avatarURL }) {
+  // Ensure embed description length fits Discord limits
   let desc = description ?? '';
-  if (desc.length > 4096) desc = desc.substring(0, 4093) + '...';
+  if (desc.length > 4096) {
+    desc = desc.substring(0, 4093) + '...';
+  }
+
   return {
     color: 0x4285f4,
-    author: { name: username, iconURL: avatarURL },
+    author: {
+      name: username,
+      iconURL: avatarURL
+    },
     title: title ?? '',
     description: desc,
     footer: {
@@ -60,131 +96,165 @@ function makeEmbed({ username, title, description, avatarURL }) {
   };
 }
 
-// --- Helper: send message to Gemini ---
+// --- Helper: send message to Gemini and update history ---
 async function sendToGemini(channelId, username, userMessage) {
-  if (!conversationHistories.has(channelId)) conversationHistories.set(channelId, []);
+  if (!conversationHistories.has(channelId)) {
+    conversationHistories.set(channelId, []);
+  }
   const history = conversationHistories.get(channelId);
+
+  // Prefix the user's message with their username (as you wanted)
   const prefixedMessage = `${username}: ${userMessage}`;
 
+  // Start chat with systemInstruction and the conversation history
   const chat = model.startChat({
     systemInstruction: { parts: [{ text: getSystemPrompt() }] },
-    history,
-    generationConfig: { maxOutputTokens: 1000, temperature: 0.7 },
+    history: history,
+    generationConfig: {
+      maxOutputTokens: 1000,
+      temperature: 0.7,
+    },
   });
 
   const result = await chat.sendMessage(prefixedMessage);
   const aiReply = result.response?.text?.() ?? '';
 
-  history.push({ role: 'user', parts: [{ text: prefixedMessage }] });
-  history.push({ role: 'model', parts: [{ text: aiReply }] });
+  // Update history (user + model)
+  history.push({
+    role: 'user',
+    parts: [{ text: prefixedMessage }],
+  });
+  history.push({
+    role: 'model',
+    parts: [{ text: aiReply }],
+  });
 
-  if (history.length > 20) conversationHistories.set(channelId, history.slice(-20));
+  // Keep only the last 20 messages to avoid huge histories
+  if (history.length > 20) {
+    conversationHistories.set(channelId, history.slice(-20));
+  }
 
   return aiReply;
 }
 
-// --- Discord client ---
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
-
-// --- Slash commands ---
-const commands = [
-  new SlashCommandBuilder()
-    .setName('ai')
-    .setDescription('Chat with Gemini AI')
-    .setDMPermission(true)
-    .addStringOption(opt => opt.setName('message').setDescription('Your message').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('clear')
-    .setDescription('Clear your AI conversation history')
-    .setDMPermission(true)
-].map(cmd => cmd.toJSON());
-
-// --- Register slash commands ---
+// --- Ready: register commands ---
 client.once('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`✅ Logged in as ${client.user.tag}!`);
+  console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
   try {
-    console.log('Registering slash commands...');
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('Slash commands registered successfully.');
-  } catch (err) {
-    console.error('Error registering slash commands:', err);
+    console.log('Started refreshing application (/) commands.');
+
+    // Replace global application commands (you can change this to guild-specific if you prefer)
+    await rest.put(Routes.applicationCommands(client.user.id), {
+      body: commands,
+    });
+
+    console.log('Successfully reloaded application (/) commands.');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
   }
 });
 
-// --- Interaction handler ---
+// --- Interaction handler (slash commands) ---
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName } = interaction;
-  const channelId = interaction.channel.id;
-  const username = interaction.user.username;
 
   try {
     if (commandName === 'ai') {
+      // Defer reply because the AI call may take a moment
       await interaction.deferReply();
-      const userMessage = interaction.options.getString('message', true);
-      const aiReply = await sendToGemini(channelId, username, userMessage);
 
-      await interaction.editReply({ embeds: [makeEmbed({
-        username,
-        title: userMessage,
-        description: aiReply,
-        avatarURL: interaction.user.displayAvatarURL()
-      })] });
+      const userMessage = interaction.options.getString('message', true);
+      const channelId = interaction.channel.id;
+      const username = interaction.user.username;
+
+      try {
+        const aiReply = await sendToGemini(channelId, username, userMessage);
+
+        const embed = makeEmbed({
+          username,
+          title: userMessage,
+          description: aiReply,
+          avatarURL: interaction.user.displayAvatarURL()
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+      } catch (aiError) {
+        console.error('Gemini AI Error:', aiError);
+        await interaction.editReply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
+      }
     } else if (commandName === 'clear') {
+      const channelId = interaction.channel.id;
       conversationHistories.delete(channelId);
+      // clear is quick; reply normally
       await interaction.reply('✅ This channel\'s AI conversation history has been cleared!');
     }
-  } catch (err) {
-    console.error('Slash command error:', err);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply('❌ Error processing your request.');
-    } else {
-      await interaction.reply('❌ Error processing your request.');
+  } catch (error) {
+    console.error('Error handling interaction:', error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply('There was an error while executing this command!');
+    } else if (interaction.deferred) {
+      await interaction.editReply('There was an error while executing this command!');
     }
   }
 });
 
-// --- Message handler (server mentions only) ---
+// --- Message handler for DMs and mentions ---
 client.on('messageCreate', async (message) => {
+  // ignore bots
   if (message.author.bot) return;
 
-  const isServer = message.channel.type !== ChannelType.DM;
-  const isMentioned = message.mentions.has(client.user);
-  if (!isServer || !isMentioned) return;
+  const isDM = message.channel.type === ChannelType.DM;
+  const isMentioned = message.mentions && message.mentions.has && message.mentions.has(client.user);
 
-  const userMessage = message.content.replace(`<@${client.user.id}>`, '').trim();
+  if (!isDM && !isMentioned) return;
+
+  // Remove bot mention from content if present
+  let userMessage = message.content.replace(`<@${client.user.id}>`, '').trim();
   if (!userMessage) return;
 
-  try {
-    message.channel.sendTyping();
-    const aiReply = await sendToGemini(message.channel.id, message.author.username, userMessage);
+  const channelId = message.channel.id;
+  const username = message.author.username;
 
-    await message.reply({ embeds: [makeEmbed({
-      username: message.author.username,
+  try {
+    // show typing indicator
+    message.channel.sendTyping();
+
+    const aiReply = await sendToGemini(channelId, isDM ? username : username, userMessage);
+
+    const embed = makeEmbed({
+      username,
       title: userMessage,
       description: aiReply,
       avatarURL: message.author.displayAvatarURL()
-    })] });
-  } catch (err) {
-    console.error('Mention reply error:', err);
-    await message.reply('❌ Could not process your message.');
+    });
+
+    await message.reply({ embeds: [embed] });
+  } catch (aiError) {
+    console.error('Gemini AI Error:', aiError);
+    try {
+      await message.reply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
+    } catch (err) {
+      console.error('Failed to send error reply:', err);
+    }
   }
 });
 
-// --- Errors ---
-client.on('error', console.error);
-process.on('unhandledRejection', console.error);
+// --- Error handling ---
+client.on('error', (error) => {
+  console.error('Discord client error:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled promise rejection:', error);
+});
 
 // --- Login ---
 client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('Bot logging in...'))
+  .then(() => console.log('Logging in...'))
   .catch(err => console.error('Failed to login:', err));
