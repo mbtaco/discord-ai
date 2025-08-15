@@ -6,6 +6,38 @@ require('dotenv').config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
+// System prompt for the AI
+const getSystemPrompt = () => {
+    const currentDate = new Date().toLocaleString('en-US', {
+        timeZone: 'UTC',
+        dateStyle: 'full',
+        timeStyle: 'short'
+    });
+    
+    return `The current date & time is ${currentDate}
+
+You are a Discord bot. The user's message will be prefixed with their username. 
+
+Keep response under 1000 characters
+
+Use Discord markdown:
+**bold text**
+*italic text*
+***bold italic***
+__underline__
+~~strikethrough~~
+\`inline code\`
+\`\`\`code blocks\`\`\`
+> quote text
+||spoiler text||
+# Header 1
+## Header 2
+### Header 3
+[link text](url)
+- bullet points
+1. numbered lists`;
+};
+
 // Create a new client instance
 const client = new Client({
     intents: [
@@ -102,9 +134,19 @@ client.on('interactionCreate', async (interaction) => {
                 // Create the message with username prefix
                 const prefixedMessage = `${username}: ${userMessage}`;
 
-                // Create chat session with history
+                // Create chat session with history and system prompt
                 const chat = model.startChat({
-                    history: history,
+                    history: [
+                        {
+                            role: 'user',
+                            parts: [{ text: getSystemPrompt() }],
+                        },
+                        {
+                            role: 'model',
+                            parts: [{ text: 'Understood! I\'m ready to help as a Discord bot. I\'ll keep responses under 1000 characters and use Discord markdown formatting.' }],
+                        },
+                        ...history
+                    ],
                     generationConfig: {
                         maxOutputTokens: 1000,
                         temperature: 0.7,
@@ -141,8 +183,8 @@ client.on('interactionCreate', async (interaction) => {
                     color: 0x4285f4, // Google blue
                     fields: [
                         {
-                            name: '👤 User',
-                            value: `**${username}:** ${userMessage}`,
+                            name: `👤 ${username}`,
+                            value: userMessage,
                             inline: false,
                         },
                         {
@@ -212,9 +254,19 @@ client.on('messageCreate', async (message) => {
         // Create the message with username prefix (only for non-DMs)
         const prefixedMessage = isDM ? userMessage : `${username}: ${userMessage}`;
 
-        // Create chat session with history
+        // Create chat session with history and system prompt
         const chat = model.startChat({
-            history: history,
+            history: [
+                {
+                    role: 'user',
+                    parts: [{ text: getSystemPrompt() }],
+                },
+                {
+                    role: 'model',
+                    parts: [{ text: 'Understood! I\'m ready to help as a Discord bot. I\'ll keep responses under 1000 characters and use Discord markdown formatting.' }],
+                },
+                ...history
+            ],
             generationConfig: {
                 maxOutputTokens: 1000,
                 temperature: 0.7,
@@ -251,8 +303,8 @@ client.on('messageCreate', async (message) => {
             color: 0x4285f4, // Google blue
             fields: [
                 {
-                    name: '👤 User',
-                    value: isDM ? userMessage : `**${username}:** ${userMessage}`,
+                    name: `👤 ${username}`,
+                    value: userMessage,
                     inline: false,
                 },
                 {
