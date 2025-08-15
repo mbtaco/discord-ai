@@ -23,22 +23,21 @@ new SlashCommandBuilder()
 
 // When the client is ready, run this code
 client.once(‘ready’, async () => {
-console.log(`✅ Logged in as ${client.user.tag}!`);
-console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
+console.log(`Logged in as ${client.user.tag}!`);
+console.log(`Bot is in ${client.guilds.cache.size} servers`);
 
 ```
-// Register slash commands (this will overwrite existing commands)
+// Register slash commands
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 try {
-    console.log('Started refreshing application (/) commands.');
+    console.log('Started refreshing application commands.');
 
-    // This will replace ALL existing commands with the ones defined above
     await rest.put(Routes.applicationCommands(client.user.id), {
         body: commands,
     });
 
-    console.log('Successfully reloaded application (/) commands.');
+    console.log('Successfully reloaded application commands.');
 } catch (error) {
     console.error('Error registering slash commands:', error);
 }
@@ -55,7 +54,7 @@ const { commandName } = interaction;
 
 try {
     if (commandName === 'ping') {
-        await interaction.reply('🏓 Pong!');
+        await interaction.reply('Pong!');
     } else if (commandName === 'user') {
         await interaction.reply(`This command was run by ${interaction.user.username}, who joined on ${interaction.member.joinedAt}.`);
     } else if (commandName === 'server') {
