@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
 // Create a new client instance
@@ -8,12 +8,6 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
     ],
-});
-
-// When the client is ready, run this code
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}!`);
-    console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
 });
 
 // Define slash commands
@@ -27,12 +21,16 @@ const commands = [
     new SlashCommandBuilder()
         .setName('server')
         .setDescription('Provides information about the server.'),
-];
+].map(command => command.toJSON());
 
-// Register slash commands
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+// When the client is ready, run this code
+client.once('ready', async () => {
+    console.log(`✅ Logged in as ${client.user.tag}!`);
+    console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
 
-(async () => {
+    // Register slash commands
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
     try {
         console.log('Started refreshing application (/) commands.');
 
@@ -42,9 +40,9 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
         console.log('Successfully reloaded application (/) commands.');
     } catch (error) {
-        console.error(error);
+        console.error('Error registering slash commands:', error);
     }
-})();
+});
 
 // Handle slash command interactions
 client.on('interactionCreate', async (interaction) => {
@@ -52,12 +50,61 @@ client.on('interactionCreate', async (interaction) => {
 
     const { commandName } = interaction;
 
-    if (commandName === 'ping') {
-        await interaction.reply('Pong!');
-    } else if (commandName === 'user') {
-        await interaction.reply(`This command was run by ${interaction.user.username}, who joined on ${interaction.member.joinedAt}.`);
-    } else if (commandName === 'server') {
-        await interaction.reply(`This server is ${interaction.guild.name} and has ${interaction.guild.memberCount} members.`);
+    try {
+        if (commandName === 'ping') {
+            await interaction.reply('🏓 Pong!');
+        } else if (commandName === 'user') {
+            await interaction.reply(`This command was run by ${interaction.user.username}, who joined on ${interaction.member.joinedAt}.`);
+        } else if (commandName === 'server') {
+            await interaction.reply(`This server is ${interaction.guild.name} and has ${interaction.guild.memberCount} members.`);
+        }
+    } catch (error) {
+        console.error('Error handling interaction:', error);
+        if (!interaction.replied) {
+            await interaction.reply('There was an error while executing this command!');
+        }
+    }
+});
+
+// Message handler for prefix commands
+client.on('messageCreate', (message) => {
+    // Ignore messages from bots
+    if (message.author.bot) return;
+
+    // Simple ping command
+    if (message.content.toLowerCase() === '!ping') {
+        message.reply('🏓 Pong!');
+    }
+
+    // Hello command
+    if (message.content.toLowerCase() === '!hello') {
+        message.reply(`👋 Hello, ${message.author.username}!`);
+    }
+
+    // Server info command
+    if (message.content.toLowerCase() === '!serverinfo') {
+        const embed = {
+            color: 0x0099ff,
+            title: 'Server Information',
+            fields: [
+                {
+                    name: 'Server Name',
+                    value: message.guild.name,
+                    inline: true,
+                },
+                {
+                    name: 'Member Count',
+                    value: message.guild.memberCount.toString(),
+                    inline: true,
+                },
+                {
+                    name: 'Created',
+                    value: message.guild.createdAt.toDateString(),
+                    inline: true,
+                },
+            ],
+        };
+        message.reply({ embeds: [embed] });
     }
 });
 
