@@ -158,9 +158,9 @@ client.on('interactionCreate', async (interaction) => {
                 const response = result.response;
                 let aiReply = response.text();
 
-                // Discord embed has field limits, so truncate if needed
-                if (aiReply.length > 1024) {
-                    aiReply = aiReply.substring(0, 1021) + '...';
+                // Discord embed description limit is 4096 characters
+                if (aiReply.length > 4096) {
+                    aiReply = aiReply.substring(0, 4093) + '...';
                 }
 
                 // Update conversation history
@@ -181,20 +181,15 @@ client.on('interactionCreate', async (interaction) => {
                 // Create embed response
                 const embed = {
                     color: 0x4285f4, // Google blue
-                    fields: [
-                        {
-                            name: `👤 ${username}`,
-                            value: userMessage,
-                            inline: false,
-                        },
-                        {
-                            name: '🤖 AI',
-                            value: aiReply,
-                            inline: false,
-                        }
-                    ],
+                    author: {
+                        name: username,
+                        iconURL: interaction.user.displayAvatarURL()
+                    },
+                    title: userMessage,
+                    description: aiReply,
                     footer: {
-                        text: 'Gemini 2.5 Flash'
+                        text: 'Gemini 2.5 Flash',
+                        iconURL: 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-gemini-icon.png'
                     },
                     timestamp: new Date().toISOString(),
                 };
@@ -278,9 +273,9 @@ client.on('messageCreate', async (message) => {
         const response = result.response;
         let aiReply = response.text();
 
-        // Discord embed field limit
-        if (aiReply.length > 1024) {
-            aiReply = aiReply.substring(0, 1021) + '...';
+        // Discord embed description limit is 4096 characters
+        if (aiReply.length > 4096) {
+            aiReply = aiReply.substring(0, 4093) + '...';
         }
 
         // Update conversation history
@@ -301,20 +296,15 @@ client.on('messageCreate', async (message) => {
         // Create embed response
         const embed = {
             color: 0x4285f4, // Google blue
-            fields: [
-                {
-                    name: `👤 ${username}`,
-                    value: userMessage,
-                    inline: false,
-                },
-                {
-                    name: '🤖 AI',
-                    value: aiReply,
-                    inline: false,
-                }
-            ],
+            author: {
+                name: username,
+                iconURL: message.author.displayAvatarURL()
+            },
+            title: userMessage,
+            description: aiReply,
             footer: {
-                text: 'Gemini 2.5 Flash'
+                text: 'Gemini 2.5 Flash',
+                iconURL: 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-gemini-icon.png'
             },
             timestamp: new Date().toISOString(),
         };
