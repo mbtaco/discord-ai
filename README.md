@@ -1,201 +1,143 @@
 # Discord AI Bot 🤖
 
-A powerful Discord bot powered by Google Gemini AI with conversation memory and modern Discord.js features.
+A powerful Discord bot powered by Google Gemini AI with server context awareness, vector similarity search, and conversation memory.
 
 ## ✨ Features
 
-- **AI-Powered Responses**: Uses Google Gemini 2.5 Flash for intelligent conversations
-- **Conversation Memory**: Remembers chat context per channel (last 20 messages)
-- **Multiple Interaction Methods**: 
-  - Slash commands (`/ai`, `/clear`, `/help`)
+- **🧠 Server Context Awareness**: Understands server structure, channels, and members
+- **🔍 Vector Similarity Search**: Uses pgvector to find relevant message history
+- **🤖 AI-Powered Responses**: Google Gemini 2.5 Flash with enhanced context
+- **💾 Message Storage**: PostgreSQL database with embeddings for intelligent retrieval
+- **🔒 Privacy Controls**: User opt-out system with `/privacy` commands
+- **💬 Multiple Interaction Methods**: 
+  - Slash commands (`/ai`, `/help`, `/privacy`, `/clear`)
   - Direct mentions in channels
-- **Rich Embeds**: Beautiful Discord embeds with user avatars and formatting
-- **Error Handling**: Robust error handling with user-friendly messages
-- **Modern Discord.js**: Built with Discord.js v14 and latest features
+- **📊 Rich Embeds**: Beautiful Discord embeds with user avatars
+- **🛡️ Modern Architecture**: Discord.js v14, Railway hosting, production-ready
 
-## 🚀 Quick Start
+## 🚀 Live Demo
 
-### Prerequisites
+This bot is currently deployed and running on Railway with full production capabilities.
 
-- Node.js 16.11.0 or higher
-- Discord Bot Token
-- Discord Client ID
-- Google Gemini API Key
+## 📋 Available Commands
 
-### Installation
+- `/ai <message>` - Chat with AI using full server context
+- `/help` - Show bot capabilities and features
+- `/privacy opt-out` - Exclude your messages from collection
+- `/privacy opt-in` - Re-enable message collection
+- `/privacy status` - Check your current privacy setting
+- `/clear` - Clear conversation history for current channel
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd discord-ai
-   ```
+## 🔧 Technical Stack
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+- **Backend**: Node.js with Discord.js v14
+- **AI**: Google Gemini 2.5 Flash + text-embedding-004
+- **Database**: PostgreSQL with pgvector extension
+- **Hosting**: Railway with auto-scaling
+- **Vector Search**: Cosine similarity on 768-dimensional embeddings
 
-3. **Set up environment variables**
-   ```bash
-   cp env.example .env
-   ```
-   
-   Edit `.env` and add your tokens:
-   ```env
-   DISCORD_TOKEN=your_discord_bot_token_here
-   CLIENT_ID=your_discord_client_id_here
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
+## 🏗️ Architecture
 
-4. **Register slash commands (one-time setup)**
-   ```bash
-   npm run commands
-   ```
+```
+Discord Messages → Bot → Embeddings → PostgreSQL/pgvector → Context Retrieval → AI Response
+```
 
-5. **Start the bot**
-   ```bash
-   # Production
-   npm start
-   
-   # Development (with auto-restart)
-   npm run dev
-   ```
+1. **Message Processing**: All server messages are captured and stored
+2. **Embedding Generation**: Google's text-embedding-004 creates vector representations
+3. **Vector Storage**: PostgreSQL with pgvector stores embeddings efficiently
+4. **Context Retrieval**: Similarity search finds relevant past conversations
+5. **AI Enhancement**: Gemini uses server context + message history for responses
 
-## 🔧 Setup Guide
+## 🔒 Privacy & Data
 
-### Discord Bot Setup
+- **Opt-out System**: Users can exclude their messages with `/privacy opt-out`
+- **Transparent Storage**: Clear privacy status checking with `/privacy status`
+- **Secure Hosting**: Railway production environment with SSL
+- **Data Retention**: Configurable retention policies
 
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Go to "Bot" section and create a bot
-4. Copy the bot token to your `.env` file
-5. Enable required intents:
-   - Server Members Intent
-   - Message Content Intent
-6. Use this OAuth2 URL to invite the bot:
-   ```
-   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=2048&scope=bot%20applications.commands
-   ```
-
-### Google Gemini API Setup
-
-1. Go to [Google AI Studio](https://aistudio.google.com/)
-2. Create a new API key
-3. Copy the API key to your `.env` file
-
-## 📝 Commands
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/ai` | Chat with Gemini AI | `/ai Hello, how are you?` |
-| `/clear` | Clear conversation history | `/clear` |
-| `/help` | Show bot help information | `/help` |
-
-## 💬 Usage Examples
-
-### Slash Commands
-- `/ai What's the weather like today?`
-- `/ai Can you help me with JavaScript?`
-- `/clear` (to reset conversation)
-
-### Mentions
-- `@bot Hello there!`
-- `@bot What's 2+2?`
-
-## 🏗️ Project Structure
+## 📁 Project Structure
 
 ```
 discord-ai/
-├── index.js          # Main bot file
-├── package.json      # Dependencies and scripts
-├── env.example      # Environment variables template
-├── .env             # Your environment variables (create this)
-└── README.md        # This file
+├── index.js              # Main bot logic and event handlers
+├── database.js           # PostgreSQL + pgvector operations
+├── deploy-commands.js    # Discord slash command registration
+├── start-production.js   # Production startup with health checks
+├── railway.json          # Railway deployment configuration
+├── SETUP.md              # Local development setup guide
+├── RAILWAY-DEPLOYMENT.md # Railway deployment guide
+└── package.json          # Dependencies and scripts
 ```
 
-## 🔒 Environment Variables
+## 🛠️ Development Setup
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DISCORD_TOKEN` | Your Discord bot token | ✅ |
-| `GEMINI_API_KEY` | Your Google Gemini API key | ✅ |
+For local development, see [SETUP.md](./SETUP.md)
 
-## 🛠️ Development
+## 🚂 Railway Deployment
 
-### Running in Development Mode
-```bash
-npm run dev
-```
-This uses nodemon to automatically restart the bot when files change.
+For production deployment to Railway, see [RAILWAY-DEPLOYMENT.md](./RAILWAY-DEPLOYMENT.md)
 
-### Command Registration
-```bash
-npm run commands
-```
-This registers/updates slash commands with Discord. Only needs to be run when you add/modify commands.
+## 📊 Key Capabilities
 
-### Code Structure
-The bot is organized into clear sections:
-- **Configuration & Initialization**: Environment setup and client config
-- **System Prompt & Utilities**: AI prompt and helper functions
-- **Slash Commands**: Command definitions and handlers
-- **Conversation Management**: Chat history and AI integration
-- **Event Handlers**: Discord.js event handling
-- **Error Handling**: Comprehensive error management
+### Server Context Awareness
+- Tracks all channels, members, and server metadata
+- Understands server structure and relationships
+- Provides context about recent active users
 
-## 🚨 Troubleshooting
+### Vector Similarity Search
+- 768-dimensional embeddings for semantic search
+- Finds relevant conversations across time
+- Intelligent context retrieval for AI responses
 
-### Common Issues
+### Privacy Compliance
+- User-controlled opt-out system
+- Transparent data handling
+- GDPR-friendly design
 
-1. **Bot not responding to commands**
-   - Check if the bot has proper permissions
-   - Verify slash commands are registered (check console logs)
-   - Ensure the bot is online
+## 🔄 Scripts
 
-2. **AI responses not working**
-   - Verify your Gemini API key is correct
-   - Check if you have sufficient API quota
-   - Look for errors in the console
+- `npm start` - Start bot locally
+- `npm run start:production` - Production startup with database migration
+- `npm run dev` - Development mode with nodemon
+- `npm run commands` - Deploy Discord slash commands
 
-3. **Bot crashes on startup**
-   - Ensure all environment variables are set
-   - Check Node.js version (16.11.0+)
-   - Verify Discord token is valid
+## 🌟 Production Features
 
-### Logs
-The bot provides detailed console logging:
-- ✅ Success messages
-- ❌ Error messages
-- 🔄 Status updates
-- 🔐 Login progress
+✅ **Auto-scaling** on Railway  
+✅ **Health monitoring** with automatic restarts  
+✅ **Database migrations** on startup  
+✅ **Error handling** and logging  
+✅ **SSL connections** where supported  
+✅ **Environment-based configuration**  
 
-## 📚 Dependencies
+## 📈 Performance
 
-- **discord.js**: Discord API wrapper
-- **@google/generative-ai**: Google Gemini AI integration
-- **dotenv**: Environment variable management
-- **nodemon**: Development auto-restart (dev dependency)
+- **Vector Search**: Sub-second similarity queries
+- **Memory Efficient**: Connection pooling and cleanup
+- **Scalable**: Handles multiple servers simultaneously
+- **Reliable**: Production-grade error handling
 
 ## 🤝 Contributing
 
+This is a production Discord bot. For modifications:
+
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+3. Test thoroughly in development
+4. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
 
-## 🆘 Support
+## 🎯 Use Cases
 
-If you encounter any issues:
-1. Check the troubleshooting section above
-2. Review the console logs for errors
-3. Ensure all setup steps are completed
-4. Open an issue with detailed error information
+Perfect for:
+- **Community Servers**: Enhanced AI with server knowledge
+- **Support Channels**: Context-aware assistance
+- **Knowledge Bases**: Semantic search across conversations
+- **Team Communication**: AI that understands your workspace
 
 ---
 
-**Happy coding! 🎉**
+**Your Discord AI bot with server context awareness and vector similarity search! 🚀**

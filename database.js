@@ -6,9 +6,10 @@ require('dotenv').config();
 const getDatabaseConfig = () => {
   // Railway provides DATABASE_URL automatically
   if (process.env.DATABASE_URL) {
+    // Railway pgvector doesn't support SSL connections
     return {
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
@@ -22,7 +23,7 @@ const getDatabaseConfig = () => {
     database: process.env.DB_NAME || 'discord_ai',
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: false,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
