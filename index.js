@@ -123,8 +123,7 @@ function makeEmbed({ username, title, description, avatarURL }) {
     footer: {
       text: 'Gemini 2.5 Flash',
       iconURL: 'https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-gemini-icon.png'
-    },
-    timestamp: new Date().toISOString()
+    }
   };
 }
 

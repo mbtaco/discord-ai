@@ -8,6 +8,7 @@
     "start:production": "node start-production.js",
     "dev": "nodemon index.js",
     "commands": "node deploy-commands.js",
+    "db:explore": "node explore-database.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
