@@ -10,6 +10,7 @@
     "commands": "node deploy-commands.js",
     "commands:global": "node deploy-commands.js global",
     "commands:guild": "node deploy-commands.js",
+    "commands:clear": "node clear-global-commands.js",
     "db:explore": "node explore-database.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
