@@ -226,7 +226,8 @@ The bot includes a health check endpoint at `/health` that Railway uses to monit
 
 4. **Slash commands not appearing:**
    - Run `npm run commands` to deploy commands
-   - Wait up to 1 hour for global commands to propagate
+   - **Quick fix**: Restart your Discord client to see commands immediately
+   - Alternative: Wait up to 1 hour for global commands to propagate automatically
 
 ### Useful Railway Commands:
 

@@ -79,6 +79,8 @@ For production deployment to Railway, see [RAILWAY-DEPLOYMENT.md](./RAILWAY-DEPL
 
 **⚠️ Important**: Use Railway's **pgvector template**, not regular PostgreSQL, for vector similarity search functionality.
 
+**💡 Tip**: After deploying commands, restart your Discord client to see slash commands immediately instead of waiting up to 1 hour.
+
 ## 📊 Key Capabilities
 
 ### Server Context Awareness

@@ -116,7 +116,8 @@ async function deployCommands(guildId = null) {
       console.log('\n⚡ Guild commands are available immediately!');
     } else {
       console.log('\n💡 Note: Global commands may take up to 1 hour to appear in all servers.');
-      console.log('   For faster testing, use: npm run commands:guild GUILD_ID');
+      console.log('   🔄 TIP: Restart your Discord client to see commands immediately!');
+      console.log('   For instant testing, use: npm run commands:guild GUILD_ID');
     }
     
   } catch (error) {
