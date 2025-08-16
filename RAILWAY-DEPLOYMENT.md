@@ -1,6 +1,15 @@
 # Railway Deployment Guide
 
-This guide will help you deploy your Discord AI bot to Railway with PostgreSQL database support.
+This guide will help you deploy your Discord AI bot to Railway with pgvector database support.
+
+## ⚠️ CRITICAL REQUIREMENT: pgvector Extension
+
+This Discord AI bot **requires pgvector extension** for vector similarity search functionality. You **MUST** use Railway's pgvector template, not regular PostgreSQL.
+
+**✅ Use**: pgvector template from Railway marketplace
+**❌ Don't use**: Regular PostgreSQL database
+
+Without pgvector, your bot will lose its intelligent context search capabilities and fall back to basic recent message retrieval.
 
 ## Prerequisites
 
@@ -46,15 +55,47 @@ Choose:
 - Give it a name like "discord-ai-bot"
 - Choose your team/personal account
 
-## Step 4: Add PostgreSQL Database
+## Step 4: Add PostgreSQL Database with pgvector
 
-In your Railway project dashboard:
+⚠️ **IMPORTANT**: This Discord AI bot requires **pgvector extension** for vector similarity search. You MUST use the pgvector template.
 
-1. Click **"+ New"** → **"Database"** → **"PostgreSQL"**
-2. Railway will automatically:
-   - Create a PostgreSQL instance
-   - Install the `pgvector` extension
+### Option A: Use pgvector Template (Recommended)
+
+1. **In your Railway project dashboard:**
+   - Click **"+ New"** → **"Template"**
+   - Search for **"pgvector"** 
+   - Or visit: https://railway.com/template/pgvector
+   - Click **"Deploy Now"**
+   - Select your existing project
+
+2. **Railway will automatically:**
+   - Create a PostgreSQL instance with pgvector extension
    - Generate a `DATABASE_URL` environment variable
+   - Enable vector similarity operations
+
+### Option B: Regular PostgreSQL (NOT RECOMMENDED)
+
+❌ **Do NOT use regular PostgreSQL** - it doesn't include pgvector extension and your bot's vector similarity search will not work.
+
+### ✅ Verify pgvector is Working
+
+After deploying the pgvector template, you can verify it's working:
+```bash
+# Test pgvector extension
+railway run node -e "
+const { Pool } = require('pg');
+const pool = new Pool({connectionString: process.env.DATABASE_URL, ssl: false});
+pool.connect().then(client => {
+  return client.query('SELECT \\'[1,2,3]\\'::vector <-> \\'[4,5,6]\\'::vector as distance');
+}).then(result => {
+  console.log('✅ pgvector working! Distance:', result.rows[0].distance);
+  process.exit(0);
+}).catch(err => {
+  console.error('❌ pgvector not working:', err.message);
+  process.exit(1);
+});
+"
+```
 
 ## Step 5: Configure Environment Variables
 
@@ -174,9 +215,10 @@ The bot includes a health check endpoint at `/health` that Railway uses to monit
    - Ensure Discord token is valid
 
 2. **Database connection errors:**
-   - Verify PostgreSQL service is running in Railway dashboard
+   - Verify pgvector database service is running in Railway dashboard
    - Check if `DATABASE_URL` is set automatically
-   - Ensure pgvector extension is installed
+   - **CRITICAL**: Ensure you used the pgvector template, not regular PostgreSQL
+   - Test pgvector with the verification command above
 
 3. **Embedding errors:**
    - Verify Gemini API key is valid and has quota
@@ -216,9 +258,10 @@ railway up --detach
 - **Scale with usage**: Railway auto-scales based on your plan
 
 ### Database Optimization:
-- Monitor database size in Railway dashboard
+- Monitor pgvector database size in Railway dashboard
 - Consider implementing message retention policies
-- Use the built-in pgvector indexes for performance
+- Use the built-in pgvector indexes for optimal similarity search performance
+- **Ensure pgvector template is used** - regular PostgreSQL won't have vector optimization
 
 ### Memory Management:
 - Monitor memory usage in Railway metrics

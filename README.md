@@ -77,6 +77,8 @@ For local development, see [SETUP.md](./SETUP.md)
 
 For production deployment to Railway, see [RAILWAY-DEPLOYMENT.md](./RAILWAY-DEPLOYMENT.md)
 
+**⚠️ Important**: Use Railway's **pgvector template**, not regular PostgreSQL, for vector similarity search functionality.
+
 ## 📊 Key Capabilities
 
 ### Server Context Awareness
