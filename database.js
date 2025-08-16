@@ -40,8 +40,17 @@ async function initializeDatabase() {
   const client = await pool.connect();
   
   try {
-    // Enable pgvector extension
-    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+    // Try to enable pgvector extension, but don't fail if it's not available
+    let vectorSupported = false;
+    try {
+      await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+      vectorSupported = true;
+      console.log('✅ pgvector extension enabled');
+    } catch (error) {
+      console.log('⚠️  pgvector extension not available - using TEXT storage for embeddings');
+      console.log('   Vector similarity search will be disabled');
+      vectorSupported = false;
+    }
     
     // Create tables
     await client.query(`
@@ -78,6 +87,8 @@ async function initializeDatabase() {
       )
     `);
 
+    // Create messages table with conditional embedding column type
+    const embeddingColumnType = vectorSupported ? 'vector(768)' : 'TEXT';
     await client.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id BIGINT PRIMARY KEY,
@@ -85,7 +96,7 @@ async function initializeDatabase() {
         channel_id BIGINT REFERENCES channels(id) ON DELETE CASCADE,
         user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
         content TEXT NOT NULL,
-        embedding vector(768),
+        embedding ${embeddingColumnType},
         message_type VARCHAR(50) DEFAULT 'normal',
         reply_to BIGINT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -101,12 +112,15 @@ async function initializeDatabase() {
       WHERE deleted_at IS NULL
     `);
 
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_messages_embedding 
-      ON messages USING ivfflat (embedding vector_cosine_ops) 
-      WITH (lists = 100)
-      WHERE deleted_at IS NULL AND embedding IS NOT NULL
-    `);
+    // Create vector index only if pgvector is supported
+    if (vectorSupported) {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_messages_embedding 
+        ON messages USING ivfflat (embedding vector_cosine_ops) 
+        WITH (lists = 100)
+        WHERE deleted_at IS NULL AND embedding IS NOT NULL
+      `);
+    }
 
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_messages_created_at 
@@ -141,6 +155,12 @@ async function storeMessage(messageData) {
     // Generate embedding for the message content
     const embedding = await generateEmbedding(messageData.content);
     
+    // Check if pgvector is supported
+    const vectorSupported = await checkVectorSupport(client);
+    const embeddingValue = embedding ? 
+      (vectorSupported ? `[${embedding.join(',')}]` : JSON.stringify(embedding)) : 
+      null;
+
     const result = await client.query(`
       INSERT INTO messages (id, server_id, channel_id, user_id, content, embedding, message_type, reply_to)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -155,7 +175,7 @@ async function storeMessage(messageData) {
       messageData.channelId,
       messageData.userId,
       messageData.content,
-      embedding ? `[${embedding.join(',')}]` : null,
+      embeddingValue,
       messageData.messageType || 'normal',
       messageData.replyTo || null
     ]);
@@ -175,6 +195,12 @@ async function updateMessage(messageId, newContent) {
   try {
     const embedding = await generateEmbedding(newContent);
     
+    // Check if pgvector is supported
+    const vectorSupported = await checkVectorSupport(client);
+    const embeddingValue = embedding ? 
+      (vectorSupported ? `[${embedding.join(',')}]` : JSON.stringify(embedding)) : 
+      null;
+    
     const result = await client.query(`
       UPDATE messages 
       SET content = $1, embedding = $2, updated_at = CURRENT_TIMESTAMP
@@ -182,7 +208,7 @@ async function updateMessage(messageId, newContent) {
       RETURNING *
     `, [
       newContent,
-      embedding ? `[${embedding.join(',')}]` : null,
+      embeddingValue,
       messageId
     ]);
 
@@ -304,38 +330,83 @@ async function findSimilarMessages(queryEmbedding, serverId, channelId = null, l
   const client = await pool.connect();
   
   try {
-    let query = `
-      SELECT m.*, u.username, u.display_name, c.name as channel_name,
-             1 - (embedding <=> $1) as similarity
-      FROM messages m
-      JOIN users u ON m.user_id = u.id
-      JOIN channels c ON m.channel_id = c.id
-      WHERE m.server_id = $2 
-        AND m.deleted_at IS NULL 
-        AND m.embedding IS NOT NULL
-        AND u.opt_out = FALSE
-    `;
+    // Check if pgvector is available by trying to use vector operators
+    const vectorSupported = await checkVectorSupport(client);
     
-    const params = [`[${queryEmbedding.join(',')}]`, serverId];
+    let query, params;
     
-    if (channelId) {
-      query += ` AND m.channel_id = $3`;
-      params.push(channelId);
+    if (vectorSupported && queryEmbedding) {
+      // Use vector similarity search
+      query = `
+        SELECT m.*, u.username, u.display_name, c.name as channel_name,
+               1 - (embedding <=> $1) as similarity
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        JOIN channels c ON m.channel_id = c.id
+        WHERE m.server_id = $2 
+          AND m.deleted_at IS NULL 
+          AND m.embedding IS NOT NULL
+          AND u.opt_out = FALSE
+      `;
+      
+      params = [`[${queryEmbedding.join(',')}]`, serverId];
+      
+      if (channelId) {
+        query += ` AND m.channel_id = $3`;
+        params.push(channelId);
+      }
+      
+      query += `
+        ORDER BY similarity DESC
+        LIMIT $${params.length + 1}
+      `;
+      params.push(limit);
+    } else {
+      // Fallback: return recent messages from the same server/channel
+      console.log('🔄 Using fallback: returning recent messages instead of vector similarity');
+      query = `
+        SELECT m.*, u.username, u.display_name, c.name as channel_name,
+               0.5 as similarity
+        FROM messages m
+        JOIN users u ON m.user_id = u.id
+        JOIN channels c ON m.channel_id = c.id
+        WHERE m.server_id = $1 
+          AND m.deleted_at IS NULL 
+          AND u.opt_out = FALSE
+      `;
+      
+      params = [serverId];
+      
+      if (channelId) {
+        query += ` AND m.channel_id = $2`;
+        params.push(channelId);
+      }
+      
+      query += `
+        ORDER BY m.created_at DESC
+        LIMIT $${params.length + 1}
+      `;
+      params.push(limit);
     }
-    
-    query += `
-      ORDER BY similarity DESC
-      LIMIT $${params.length + 1}
-    `;
-    params.push(limit);
 
     const result = await client.query(query, params);
     return result.rows;
   } catch (error) {
     console.error('Error finding similar messages:', error);
+    // Return empty array on error
     return [];
   } finally {
     client.release();
+  }
+}
+
+// Helper function to check if vector operations are supported
+async function checkVectorSupport(client) {
+  try {
+    await client.query("SELECT '[1,2,3]'::vector");
+    return true;
+  } catch (error) {
+    return false;
   }
 }
 

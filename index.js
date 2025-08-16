@@ -82,9 +82,12 @@ Use Discord markdown formatting:
 
   // Add relevant message context if available
   if (relevantMessages && relevantMessages.length > 0) {
+    const isVectorSearch = relevantMessages.some(msg => msg.similarity > 0.5);
+    const contextType = isVectorSearch ? "Relevant Previous Messages (Vector Search)" : "Recent Messages";
+    
     systemPrompt += `
 
-## Relevant Previous Messages:
+## ${contextType}:
 ${relevantMessages.map(msg => 
   `**${msg.display_name || msg.username}** in #${msg.channel_name}: ${msg.content.substring(0, 150)}${msg.content.length > 150 ? '...' : ''}`
 ).join('\n')}
