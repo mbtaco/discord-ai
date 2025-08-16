@@ -24,6 +24,32 @@ const commands = [
   {
     name: 'help',
     description: 'Show bot help information'
+  },
+  {
+    name: 'privacy',
+    description: 'Manage your data privacy settings',
+    options: [
+      {
+        name: 'action',
+        description: 'Privacy action to take',
+        type: 3, // STRING type
+        required: true,
+        choices: [
+          {
+            name: 'opt-out',
+            value: 'opt-out'
+          },
+          {
+            name: 'opt-in',
+            value: 'opt-in'
+          },
+          {
+            name: 'status',
+            value: 'status'
+          }
+        ]
+      }
+    ]
   }
 ];
 

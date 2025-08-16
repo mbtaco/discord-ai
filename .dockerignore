@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+README.md
+SETUP.md
+RAILWAY-DEPLOYMENT.md
+Dockerfile
+.dockerignore
+*.md
