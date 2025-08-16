@@ -459,6 +459,24 @@ async function getServerContext(serverId) {
   }
 }
 
+// Check if message exists
+async function messageExists(messageId) {
+  const client = await pool.connect();
+  
+  try {
+    const result = await client.query(
+      'SELECT id FROM messages WHERE id = $1 AND deleted_at IS NULL',
+      [messageId]
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('Error checking message existence:', error);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
 // Privacy controls
 async function setUserOptOut(userId, optOut = true) {
   const client = await pool.connect();
@@ -501,5 +519,6 @@ module.exports = {
   generateEmbedding,
   findSimilarMessages,
   getServerContext,
-  setUserOptOut
+  setUserOptOut,
+  messageExists
 };

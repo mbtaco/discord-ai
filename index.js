@@ -16,7 +16,8 @@ const {
   generateEmbedding,
   findSimilarMessages,
   getServerContext,
-  setUserOptOut
+  setUserOptOut,
+  messageExists
 } = require('./database');
 require('dotenv').config();
 
@@ -552,6 +553,7 @@ async function handleBackfillCommand(interaction) {
     let totalMessages = 0;
     let processedMessages = 0;
     let skippedMessages = 0;
+    let alreadyExists = 0;
     let errors = 0;
 
     // Update initial status
@@ -637,6 +639,13 @@ async function handleBackfillCommand(interaction) {
       // Process batch
       for (const { message, channel, guild } of batch) {
         try {
+          // Check if message already exists in database
+          const exists = await messageExists(message.id);
+          if (exists) {
+            alreadyExists++;
+            continue;
+          }
+
           // Ensure user and channel data is synced
           await upsertUser({
             id: message.author.id,
@@ -668,15 +677,17 @@ async function handleBackfillCommand(interaction) {
 
       // Update progress every batch
       if (i % (batchSize * 2) === 0) {
+        const currentIndex = i + batch.length;
         await interaction.editReply({
           embeds: [{
             color: 0x3b82f6,
             title: '🔄 Processing Messages',
             description: `Processing messages and generating embeddings...\n⚡ Rate limiting to respect Gemini API`,
             fields: [
-              { name: '📊 Progress', value: `${processedMessages} / ${totalMessages} processed`, inline: true },
-              { name: '✅ Successful', value: `${processedMessages}`, inline: true },
-              { name: '⚠️ Skipped', value: `${skippedMessages}`, inline: true }
+              { name: '📊 Progress', value: `${currentIndex} / ${totalMessages} checked`, inline: true },
+              { name: '✅ New Messages', value: `${processedMessages}`, inline: true },
+              { name: '🔄 Already Exists', value: `${alreadyExists}`, inline: true },
+              { name: '⚠️ Skipped/Errors', value: `${skippedMessages}`, inline: true }
             ]
           }]
         });
@@ -689,20 +700,25 @@ async function handleBackfillCommand(interaction) {
     }
 
     // Final success message
+    const newEmbeddings = processedMessages;
+    const totalExisting = alreadyExists + processedMessages;
+    
     await interaction.editReply({
       embeds: [{
         color: 0x10b981,
         title: '✅ Backfill Complete!',
-        description: `Successfully processed ${processedMessages} messages from ${channels.size} channels.`,
+        description: `Processed ${totalMessages} messages from ${channels.size} channels. Generated ${newEmbeddings} new embeddings.`,
         fields: [
-          { name: '📊 Total Messages', value: `${totalMessages}`, inline: true },
-          { name: '✅ Successfully Processed', value: `${processedMessages}`, inline: true },
-          { name: '⚠️ Skipped', value: `${skippedMessages}`, inline: true },
+          { name: '📊 Total Checked', value: `${totalMessages}`, inline: true },
+          { name: '✅ New Messages', value: `${processedMessages}`, inline: true },
+          { name: '🔄 Already Existed', value: `${alreadyExists}`, inline: true },
+          { name: '⚠️ Skipped/Errors', value: `${skippedMessages}`, inline: true },
           { name: '❌ Channel Errors', value: `${errors}`, inline: true },
-          { name: '🧠 Embeddings Generated', value: `${processedMessages}`, inline: true },
-          { name: '💡 Result', value: 'Bot now has context from recent server history!', inline: false }
+          { name: '🧠 New Embeddings', value: `${newEmbeddings}`, inline: true },
+          { name: '💡 Smart Features', value: alreadyExists > 0 ? 'Skipped duplicates automatically!' : 'Bot now has context from server history!', inline: false },
+          { name: '📈 Efficiency', value: alreadyExists > 0 ? `Saved ${alreadyExists} API calls by skipping existing messages` : 'All messages were new to the database', inline: false }
         ],
-        footer: { text: 'Backfill completed - Your bot is now smarter!' }
+        footer: { text: 'Backfill completed - Ready for next run without duplicates!' }
       }]
     });
 
