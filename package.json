@@ -7,10 +7,11 @@
     "start": "node index.js",
     "start:production": "node start-production.js",
     "dev": "nodemon index.js",
-    "commands": "node deploy-commands.js",
+    "commands": "node deploy-commands.js global",
     "commands:global": "node deploy-commands.js global",
     "commands:guild": "node deploy-commands.js",
-    "commands:clear": "node clear-global-commands.js",
+    "commands:clear-global": "node clear-global-commands.js",
+    "commands:clear-guild": "node clear-guild-commands.js",
     "db:explore": "node explore-database.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
