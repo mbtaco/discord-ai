@@ -50,6 +50,21 @@ const commands = [
         ]
       }
     ]
+  },
+  {
+    name: 'backfill',
+    description: 'Backfill database with recent server messages (Admin only)',
+    default_member_permissions: '8', // Administrator permission
+    options: [
+      {
+        name: 'limit',
+        description: 'Number of messages to backfill (default: 1000, max: 1000)',
+        type: 4, // INTEGER type
+        required: false,
+        min_value: 1,
+        max_value: 1000
+      }
+    ]
   }
 ];
 

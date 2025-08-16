@@ -221,6 +221,9 @@ client.on('interactionCreate', async (interaction) => {
       case 'privacy':
         await handlePrivacyCommand(interaction);
         break;
+      case 'backfill':
+        await handleBackfillCommand(interaction);
+        break;
       default:
         await interaction.reply('❌ Unknown command');
     }
@@ -431,7 +434,7 @@ async function handleHelpCommand(interaction) {
     fields: [
       {
         name: '📝 Commands',
-        value: '`/ai <message>` - Chat with AI\n`/clear` - Clear conversation history\n`/privacy <action>` - Manage data privacy\n`/help` - Show this help',
+        value: '`/ai <message>` - Chat with AI\n`/clear` - Clear conversation history\n`/privacy <action>` - Manage data privacy\n`/backfill [limit]` - Backfill message history (Admin only)\n`/help` - Show this help',
         inline: false
       },
       {
@@ -447,6 +450,11 @@ async function handleHelpCommand(interaction) {
       {
         name: '🔒 Privacy',
         value: '• Use `/privacy opt-out` to exclude your messages\n• Use `/privacy opt-in` to re-enable data collection\n• Use `/privacy status` to check your current setting',
+        inline: false
+      },
+      {
+        name: '⚡ Admin Features',
+        value: '• `/backfill` - Adds recent server messages to database for AI context\n• Useful when bot joins an existing server with history\n• Respects Gemini API rate limits (1000 messages max)',
         inline: false
       }
     ],
@@ -517,6 +525,202 @@ async function handlePrivacyCommand(interaction) {
   } catch (error) {
     console.error('Privacy command error:', error);
     await interaction.reply('❌ Sorry, I encountered an error while updating your privacy settings. Please try again later.');
+  }
+}
+
+async function handleBackfillCommand(interaction) {
+  // Check if user has administrator permissions
+  if (!interaction.member.permissions.has('Administrator')) {
+    await interaction.reply({
+      embeds: [{
+        color: 0xef4444,
+        title: '❌ Permission Denied',
+        description: 'Only server administrators can use the backfill command.',
+        footer: { text: 'Administrator permission required' }
+      }],
+      ephemeral: true
+    });
+    return;
+  }
+
+  await interaction.deferReply();
+
+  const limit = interaction.options.getInteger('limit') || 1000;
+  const guild = interaction.guild;
+  
+  try {
+    let totalMessages = 0;
+    let processedMessages = 0;
+    let skippedMessages = 0;
+    let errors = 0;
+
+    // Update initial status
+    await interaction.editReply({
+      embeds: [{
+        color: 0x3b82f6,
+        title: '🔄 Starting Backfill Process',
+        description: `Collecting recent messages from all channels...\nTarget: ${limit} messages`,
+        fields: [
+          { name: '📊 Progress', value: 'Scanning channels...', inline: false }
+        ]
+      }]
+    });
+
+    // Get all text channels
+    const channels = guild.channels.cache.filter(channel => 
+      channel.type === ChannelType.GuildText && 
+      channel.permissionsFor(guild.members.me).has(['ViewChannel', 'ReadMessageHistory'])
+    );
+
+    console.log(`🔍 Found ${channels.size} accessible text channels for backfill`);
+
+    // Collect messages from all channels
+    const allMessages = [];
+    
+    for (const [channelId, channel] of channels) {
+      try {
+        console.log(`📥 Fetching messages from #${channel.name}`);
+        
+        // Calculate how many messages to fetch from this channel
+        const remainingLimit = limit - allMessages.length;
+        if (remainingLimit <= 0) break;
+        
+        const fetchLimit = Math.min(remainingLimit, 100); // Discord API limit per request
+        const messages = await channel.messages.fetch({ limit: fetchLimit });
+        
+        // Add messages to collection with channel info
+        for (const [messageId, message] of messages) {
+          if (allMessages.length >= limit) break;
+          
+          // Skip bot messages and empty messages
+          if (message.author.bot || !message.content.trim()) continue;
+          
+          allMessages.push({
+            message,
+            channel,
+            guild
+          });
+        }
+        
+        console.log(`📊 Collected ${messages.size} messages from #${channel.name} (Total: ${allMessages.length})`);
+        
+      } catch (error) {
+        console.error(`❌ Error fetching from #${channel.name}:`, error.message);
+        errors++;
+      }
+    }
+
+    // Sort messages by creation date (oldest first for better context building)
+    allMessages.sort((a, b) => a.message.createdTimestamp - b.message.createdTimestamp);
+    
+    totalMessages = allMessages.length;
+    console.log(`📋 Total messages collected: ${totalMessages}`);
+
+    // Update progress
+    await interaction.editReply({
+      embeds: [{
+        color: 0x3b82f6,
+        title: '🔄 Processing Messages',
+        description: `Found ${totalMessages} messages to process.\nGenerating embeddings and storing in database...`,
+        fields: [
+          { name: '📊 Progress', value: `0 / ${totalMessages} processed`, inline: false },
+          { name: '⚡ Rate Limit', value: 'Respecting Gemini API limits...', inline: false }
+        ]
+      }]
+    });
+
+    // Process messages in batches with rate limiting
+    const batchSize = 10;
+    for (let i = 0; i < allMessages.length; i += batchSize) {
+      const batch = allMessages.slice(i, i + batchSize);
+      
+      // Process batch
+      for (const { message, channel, guild } of batch) {
+        try {
+          // Ensure user and channel data is synced
+          await upsertUser({
+            id: message.author.id,
+            username: message.author.username,
+            displayName: message.author.displayName,
+            avatarUrl: message.author.displayAvatarURL()
+          });
+
+          await syncChannelData(channel);
+
+          // Store the message (this will generate embedding automatically)
+          await storeMessage({
+            id: message.id,
+            serverId: guild.id,
+            channelId: channel.id,
+            userId: message.author.id,
+            content: message.content,
+            messageType: 'backfill',
+            replyTo: message.reference?.messageId || null
+          });
+
+          processedMessages++;
+          
+        } catch (error) {
+          console.error(`❌ Error processing message ${message.id}:`, error.message);
+          skippedMessages++;
+        }
+      }
+
+      // Update progress every batch
+      if (i % (batchSize * 2) === 0) {
+        await interaction.editReply({
+          embeds: [{
+            color: 0x3b82f6,
+            title: '🔄 Processing Messages',
+            description: `Processing messages and generating embeddings...\n⚡ Rate limiting to respect Gemini API`,
+            fields: [
+              { name: '📊 Progress', value: `${processedMessages} / ${totalMessages} processed`, inline: true },
+              { name: '✅ Successful', value: `${processedMessages}`, inline: true },
+              { name: '⚠️ Skipped', value: `${skippedMessages}`, inline: true }
+            ]
+          }]
+        });
+      }
+
+      // Rate limiting: wait between batches to respect Gemini API limits
+      if (i + batchSize < allMessages.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+      }
+    }
+
+    // Final success message
+    await interaction.editReply({
+      embeds: [{
+        color: 0x10b981,
+        title: '✅ Backfill Complete!',
+        description: `Successfully processed ${processedMessages} messages from ${channels.size} channels.`,
+        fields: [
+          { name: '📊 Total Messages', value: `${totalMessages}`, inline: true },
+          { name: '✅ Successfully Processed', value: `${processedMessages}`, inline: true },
+          { name: '⚠️ Skipped', value: `${skippedMessages}`, inline: true },
+          { name: '❌ Channel Errors', value: `${errors}`, inline: true },
+          { name: '🧠 Embeddings Generated', value: `${processedMessages}`, inline: true },
+          { name: '💡 Result', value: 'Bot now has context from recent server history!', inline: false }
+        ],
+        footer: { text: 'Backfill completed - Your bot is now smarter!' }
+      }]
+    });
+
+    console.log(`✅ Backfill completed: ${processedMessages} messages processed`);
+
+  } catch (error) {
+    console.error('Backfill command error:', error);
+    await interaction.editReply({
+      embeds: [{
+        color: 0xef4444,
+        title: '❌ Backfill Failed',
+        description: 'An error occurred during the backfill process.',
+        fields: [
+          { name: 'Error', value: error.message.substring(0, 1000), inline: false },
+          { name: 'Processed', value: `${processedMessages} messages before error`, inline: true }
+        ]
+      }]
+    });
   }
 }
 
