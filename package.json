@@ -1,20 +1,23 @@
 {
-  "name": "discord-bot",
+  "name": "discord-ai",
   "version": "1.0.0",
-  "description": "A Discord bot built with Discord.js",
+  "description": "A Discord bot powered by Google Gemini AI with conversation memory",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "commands": "node deploy-commands.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "discord",
     "bot",
     "discord.js",
-    "node.js"
+    "ai",
+    "gemini",
+    "chatbot"
   ],
-  "author": "Your Name",
+  "author": "Matthias Berger",
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.14.1",
@@ -27,13 +30,5 @@
   "engines": {
     "node": ">=16.11.0",
     "npm": ">=7.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yourusername/your-repo-name.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/your-repo-name/issues"
-  },
-  "homepage": "https://github.com/yourusername/your-repo-name#readme"
+  }
 }

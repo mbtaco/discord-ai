@@ -1,20 +1,42 @@
-// bot.js
 const {
   Client,
   GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
   ChannelType
 } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { commands } = require('./deploy-commands');
 require('dotenv').config();
 
-// --- Initialize Gemini AI ---
+// Configuration & Initialization
+// =============================
+
+// Validate required environment variables
+if (!process.env.DISCORD_TOKEN) {
+  console.error('❌ DISCORD_TOKEN is required in .env file');
+  process.exit(1);
+}
+
+if (!process.env.GEMINI_API_KEY) {
+  console.error('❌ GEMINI_API_KEY is required in .env file');
+  process.exit(1);
+}
+
+// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-// --- System prompt ---
+// Discord client configuration
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
+
+// System Prompt & Utilities
+// ========================
+
 const getSystemPrompt = () => {
   const currentDate = new Date().toLocaleString('en-US', {
     timeZone: 'UTC',
@@ -24,57 +46,25 @@ const getSystemPrompt = () => {
 
   return `The current date & time is ${currentDate}
 
-You are a Discord bot. The user's message will be prefixed with their username. 
+You are a helpful Discord bot powered by Google Gemini AI. The user's message will be prefixed with their username. 
 
-Keep response under 1000 characters
+Keep responses under 1000 characters and be helpful, friendly, and engaging.
 
-Use Discord markdown:
-**bold text**
-*italic text*
-***bold italic***
-__underline__
-~~strikethrough~~
-\`inline code\`
-\`\`\`code blocks\`\`\`
-> quote text
-||spoiler text||
-# Header 1
-## Header 2
-### Header 3
-[link text](url)
-- bullet points
-1. numbered lists`;
+Use Discord markdown formatting:
+**bold text** *italic text* ***bold italic*** __underline__ ~~strikethrough~~
+\`inline code\` \`\`\`code blocks\`\`\` > quote text ||spoiler text||
+# Headers - bullet points - numbered lists [links](url)`;
 };
 
-// --- Discord client & commands ---
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+// The commands array is now imported from deploy-commands.js
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('ai')
-    .setDescription('Chat with Gemini AI')
-    .addStringOption(option =>
-      option.setName('message')
-        .setDescription('Your message to the AI')
-        .setRequired(true)
-    ),
-  new SlashCommandBuilder()
-    .setName('clear')
-    .setDescription('Clear your AI conversation history'),
-].map(cmd => cmd.toJSON());
+// Conversation Management
+// ======================
 
-// --- In-memory conversation storage (per-channel) ---
 const conversationHistories = new Map();
+const MAX_HISTORY_LENGTH = 20;
 
-// --- Helper: create embed object ---
 function makeEmbed({ username, title, description, avatarURL }) {
-  // Ensure embed description length fits Discord limits
   let desc = description ?? '';
   if (desc.length > 4096) {
     desc = desc.substring(0, 4093) + '...';
@@ -96,156 +86,188 @@ function makeEmbed({ username, title, description, avatarURL }) {
   };
 }
 
-// --- Helper: send message to Gemini and update history ---
 async function sendToGemini(channelId, username, userMessage) {
   if (!conversationHistories.has(channelId)) {
     conversationHistories.set(channelId, []);
   }
+  
   const history = conversationHistories.get(channelId);
-
-  // Prefix the user's message with their username (as you wanted)
   const prefixedMessage = `${username}: ${userMessage}`;
 
-  // Start chat with systemInstruction and the conversation history
-  const chat = model.startChat({
-    systemInstruction: { parts: [{ text: getSystemPrompt() }] },
-    history: history,
-    generationConfig: {
-      maxOutputTokens: 1000,
-      temperature: 0.7,
-    },
-  });
+  try {
+    const chat = model.startChat({
+      systemInstruction: { parts: [{ text: getSystemPrompt() }] },
+      history: history,
+      generationConfig: {
+        maxOutputTokens: 1000,
+        temperature: 0.7,
+      },
+    });
 
-  const result = await chat.sendMessage(prefixedMessage);
-  const aiReply = result.response?.text?.() ?? '';
+    const result = await chat.sendMessage(prefixedMessage);
+    const aiReply = result.response?.text?.() ?? '';
 
-  // Update history (user + model)
-  history.push({
-    role: 'user',
-    parts: [{ text: prefixedMessage }],
-  });
-  history.push({
-    role: 'model',
-    parts: [{ text: aiReply }],
-  });
+    // Update conversation history
+    history.push({
+      role: 'user',
+      parts: [{ text: prefixedMessage }],
+    });
+    history.push({
+      role: 'model',
+      parts: [{ text: aiReply }],
+    });
 
-  // Keep only the last 20 messages to avoid huge histories
-  if (history.length > 20) {
-    conversationHistories.set(channelId, history.slice(-20));
+    // Maintain history size limit
+    if (history.length > MAX_HISTORY_LENGTH) {
+      conversationHistories.set(channelId, history.slice(-MAX_HISTORY_LENGTH));
+    }
+
+    return aiReply;
+  } catch (error) {
+    console.error('Gemini AI Error:', error);
+    throw new Error('Failed to get AI response');
   }
-
-  return aiReply;
 }
 
-// --- Ready: register commands ---
+// Discord Event Handlers
+// =====================
+
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}!`);
   console.log(`🤖 Bot is in ${client.guilds.cache.size} servers`);
 
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
-  try {
-    console.log('Started refreshing application (/) commands.');
-
-    // Replace global application commands (you can change this to guild-specific if you prefer)
-    await rest.put(Routes.applicationCommands(client.user.id), {
-      body: commands,
-    });
-
-    console.log('Successfully reloaded application (/) commands.');
-  } catch (error) {
-    console.error('Error registering slash commands:', error);
-  }
+  // The slash command registration is now handled by deploy-commands.js
 });
 
-// --- Interaction handler (slash commands) ---
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName } = interaction;
 
   try {
-    if (commandName === 'ai') {
-      // Defer reply because the AI call may take a moment
-      await interaction.deferReply();
-
-      const userMessage = interaction.options.getString('message', true);
-      const channelId = interaction.channel.id;
-      const username = interaction.user.username;
-
-      try {
-        const aiReply = await sendToGemini(channelId, username, userMessage);
-
-        const embed = makeEmbed({
-          username,
-          title: userMessage,
-          description: aiReply,
-          avatarURL: interaction.user.displayAvatarURL()
-        });
-
-        await interaction.editReply({ embeds: [embed] });
-      } catch (aiError) {
-        console.error('Gemini AI Error:', aiError);
-        await interaction.editReply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
-      }
-    } else if (commandName === 'clear') {
-      const channelId = interaction.channel.id;
-      conversationHistories.delete(channelId);
-      // clear is quick; reply normally
-      await interaction.reply('✅ This channel\'s AI conversation history has been cleared!');
+    switch (commandName) {
+      case 'ai':
+        await handleAICommand(interaction);
+        break;
+      case 'clear':
+        await handleClearCommand(interaction);
+        break;
+      case 'help':
+        await handleHelpCommand(interaction);
+        break;
+      default:
+        await interaction.reply('❌ Unknown command');
     }
   } catch (error) {
     console.error('Error handling interaction:', error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply('There was an error while executing this command!');
-    } else if (interaction.deferred) {
-      await interaction.editReply('There was an error while executing this command!');
-    }
+    await handleInteractionError(interaction, error);
   }
 });
 
-// --- Message handler for DMs and mentions ---
 client.on('messageCreate', async (message) => {
-  // ignore bots
   if (message.author.bot) return;
 
-  const isDM = message.channel.type === ChannelType.DM;
-  const isMentioned = message.mentions && message.mentions.has && message.mentions.has(client.user);
+  // Only respond to mentions in channels, not DMs
+  const isMentioned = message.mentions?.has(client.user);
+  if (!isMentioned) return;
 
-  if (!isDM && !isMentioned) return;
-
-  // Remove bot mention from content if present
   let userMessage = message.content.replace(`<@${client.user.id}>`, '').trim();
   if (!userMessage) return;
 
-  const channelId = message.channel.id;
-  const username = message.author.username;
-
   try {
-    // show typing indicator
     message.channel.sendTyping();
-
-    const aiReply = await sendToGemini(channelId, isDM ? username : username, userMessage);
+    const aiReply = await sendToGemini(message.channel.id, message.author.username, userMessage);
 
     const embed = makeEmbed({
-      username,
+      username: message.author.username,
       title: userMessage,
       description: aiReply,
       avatarURL: message.author.displayAvatarURL()
     });
 
     await message.reply({ embeds: [embed] });
-  } catch (aiError) {
-    console.error('Gemini AI Error:', aiError);
-    try {
-      await message.reply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
-    } catch (err) {
-      console.error('Failed to send error reply:', err);
-    }
+  } catch (error) {
+    console.error('Message handling error:', error);
+    await message.reply('❌ Sorry, I encountered an error. Please try again later.');
   }
 });
 
-// --- Error handling ---
+// Command Handlers
+// ===============
+
+async function handleAICommand(interaction) {
+  await interaction.deferReply();
+
+  const userMessage = interaction.options.getString('message', true);
+  const channelId = interaction.channel.id;
+  const username = interaction.user.username;
+
+  try {
+    const aiReply = await sendToGemini(channelId, username, userMessage);
+
+    const embed = makeEmbed({
+      username,
+      title: userMessage,
+      description: aiReply,
+      avatarURL: interaction.user.displayAvatarURL()
+    });
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('AI command error:', error);
+    await interaction.editReply('❌ Sorry, I encountered an error while processing your request. Please try again later.');
+  }
+}
+
+async function handleClearCommand(interaction) {
+  const channelId = interaction.channel.id;
+  conversationHistories.delete(channelId);
+  await interaction.reply('✅ This channel\'s AI conversation history has been cleared!');
+}
+
+async function handleHelpCommand(interaction) {
+  const helpEmbed = {
+    color: 0x4285f4,
+    title: '🤖 Discord AI Bot Help',
+    description: 'I\'m a Discord bot powered by Google Gemini AI!',
+    fields: [
+      {
+        name: '📝 Commands',
+        value: '`/ai <message>` - Chat with AI\n`/clear` - Clear conversation history\n`/help` - Show this help',
+        inline: false
+      },
+      {
+        name: '💬 Usage',
+        value: '• Use `/ai` followed by your message\n• Mention me in any channel',
+        inline: false
+      },
+      {
+        name: '🔧 Features',
+        value: '• AI-powered responses\n• Conversation memory per channel\n• Discord markdown support\n• Slash commands',
+        inline: false
+      }
+    ],
+    footer: {
+      text: 'Powered by Google Gemini 2.5 Flash'
+    }
+  };
+
+  await interaction.reply({ embeds: [helpEmbed] });
+}
+
+async function handleInteractionError(interaction, error) {
+  const errorMessage = 'There was an error while executing this command!';
+  
+  if (!interaction.replied && !interaction.deferred) {
+    await interaction.reply(errorMessage);
+  } else if (interaction.deferred) {
+    await interaction.editReply(errorMessage);
+  }
+}
+
+// Error Handling & Cleanup
+// =======================
+
 client.on('error', (error) => {
   console.error('Discord client error:', error);
 });
@@ -254,7 +276,18 @@ process.on('unhandledRejection', (error) => {
   console.error('Unhandled promise rejection:', error);
 });
 
-// --- Login ---
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down bot...');
+  client.destroy();
+  process.exit(0);
+});
+
+// Bot Login
+// =========
+
 client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('Logging in...'))
-  .catch(err => console.error('Failed to login:', err));
+  .then(() => console.log('🔐 Logging in...'))
+  .catch(err => {
+    console.error('❌ Failed to login:', err);
+    process.exit(1);
+  });
