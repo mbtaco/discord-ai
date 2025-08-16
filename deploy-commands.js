@@ -71,7 +71,7 @@ const commands = [
 // Command Deployment
 // =================
 
-async function deployCommands() {
+async function deployCommands(guildId = null) {
   if (!process.env.DISCORD_TOKEN) {
     console.error('❌ DISCORD_TOKEN is required in .env file');
     process.exit(1);
@@ -87,21 +87,37 @@ async function deployCommands() {
   const clientId = process.env.CLIENT_ID;
 
   try {
-    console.log('🔄 Started refreshing application (/) commands...');
+    if (guildId) {
+      console.log(`🔄 Started refreshing guild-specific (/) commands for guild ${guildId}...`);
+      
+      // Deploy commands to specific guild (immediate)
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+        body: commands,
+      });
 
-    // Deploy commands globally (available in all servers)
-    await rest.put(Routes.applicationCommands(clientId), {
-      body: commands,
-    });
+      console.log(`✅ Successfully registered application (/) commands for guild ${guildId}!`);
+    } else {
+      console.log('🔄 Started refreshing application (/) commands globally...');
 
-    console.log('✅ Successfully registered application (/) commands globally!');
+      // Deploy commands globally (available in all servers)
+      await rest.put(Routes.applicationCommands(clientId), {
+        body: commands,
+      });
+
+      console.log('✅ Successfully registered application (/) commands globally!');
+    }
+
     console.log('📝 Commands registered:');
     commands.forEach(cmd => {
       console.log(`   • /${cmd.name}: ${cmd.description}`);
     });
     
-    console.log('\n💡 Note: Global commands may take up to 1 hour to appear in all servers.');
-    console.log('   For faster testing, consider using guild-specific commands instead.');
+    if (guildId) {
+      console.log('\n⚡ Guild commands are available immediately!');
+    } else {
+      console.log('\n💡 Note: Global commands may take up to 1 hour to appear in all servers.');
+      console.log('   For faster testing, use: npm run commands:guild GUILD_ID');
+    }
     
   } catch (error) {
     console.error('❌ Error registering slash commands:', error);
@@ -113,15 +129,32 @@ async function deployCommands() {
 // =========
 
 if (require.main === module) {
-  deployCommands()
-    .then(() => {
-      console.log('\n🎉 Command deployment completed successfully!');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('\n💥 Command deployment failed:', error);
-      process.exit(1);
-    });
+  // Check for guild ID argument
+  const guildId = process.argv[2];
+  
+  if (guildId && guildId !== 'global') {
+    console.log(`🎯 Deploying commands to guild: ${guildId}`);
+    deployCommands(guildId)
+      .then(() => {
+        console.log('\n🎉 Guild command deployment completed successfully!');
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('\n💥 Guild command deployment failed:', error);
+        process.exit(1);
+      });
+  } else {
+    console.log('🌍 Deploying commands globally...');
+    deployCommands()
+      .then(() => {
+        console.log('\n🎉 Global command deployment completed successfully!');
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('\n💥 Global command deployment failed:', error);
+        process.exit(1);
+      });
+  }
 }
 
 module.exports = { commands, deployCommands };
